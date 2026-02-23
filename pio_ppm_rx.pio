@@ -1,0 +1,15 @@
+.program ppm_rx
+
+.wrap_target
+    wait 0 pin 0        ; Espera a que el pin baje (inicio del pulso si es invertido)
+    mov x, ~NULL        ; Carga 0xFFFFFFFF en X
+    
+count_loop:
+    jmp pin wait_next   ; Si el pin sube (1), dejamos de contar y esperamos el próximo
+    jmp x-- count_loop  ; Si el pin sigue en bajo (0), decrementa y sigue contando
+
+wait_next:
+    wait 0 pin 0        ; Espera al SIGUIENTE flanco de bajada
+    mov isr, ~x         ; Mueve el resultado
+    push noblock        
+.wrap

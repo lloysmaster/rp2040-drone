@@ -1,0 +1,45 @@
+.program dshot300
+
+.wrap_target
+    pull block          ; Espera el paquete de 16 bits de la CPU
+    set y, 15           ; Contador para 16 bits (de 15 a 0)
+
+bitloop:
+    out x, 1            ; Desplaza 1 bit desde OSR hacia X
+    jmp !x do_zero      ; Si el bit es 0, salta a la sección de cero
+
+do_one:
+    set pins, 1 [14]    ; Pulso ALTO (aprox 1.85us a 8.1MHz)
+    set pins, 0 [10]    ; Pulso BAJO (aprox 1.48us)
+    jmp check_loop      
+
+do_zero:
+    set pins, 1 [7]     ; Pulso ALTO corto (aprox 0.98us)
+    set pins, 0 [17]    ; Pulso BAJO largo (aprox 2.34us)
+
+check_loop:
+    jmp y-- bitloop     ; Repetir hasta que Y sea 0
+.wrap
+
+% c-sdk {
+static inline void dshot300_program_init(PIO pio, uint sm, uint offset, uint pin) {
+    pio_sm_config c = dshot300_program_get_default_config(offset);
+
+    // Configurar el pin para PIO
+    pio_gpio_init(pio, pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
+    sm_config_set_set_pins(&c, pin, 1);
+
+    // Configurar el desplazamiento: 
+    // Shift a la izquierda (false), No Autopull (false), 16 bits
+    sm_config_set_out_shift(&c, false, false, 16);
+
+    // Reloj para DShot300 (27 ciclos por bit)
+    // 300,000 bits/s * 27 ciclos = 8.1 MHz
+    float div = (float)clock_get_hz(clk_sys) / 8100000.0;
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
