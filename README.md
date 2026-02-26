@@ -72,5 +72,5 @@ Este proyecto requiere el **Raspberry Pi Pico SDK** configurado en tu sistema.
 
 desde la interfaz de visual studio se hace todo mucho mas sencillo, directamente encotras botones como "compile" y "run" que cumplen de paso 2,3 y 4 respectivamente, si estas en linux quiza el 4 paso lo tengas que hacer manualmente
 
-pequenio detalle, uso el sdk de pi pico desde la extencion de visual studio
+pequeño detalle, uso el sdk de pi pico desde la extencion de visual studio
 
