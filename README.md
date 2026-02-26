@@ -33,13 +33,14 @@ Actualmente el sistema procesa la señal de radio y estabiliza los motores en un
 - [ ] **Seguridad:** Implementación de Failsafe y armado de motores.
 
 ### Diagrama de Motores (Configuración X)
-```text
-  M2 (FL) CW      M4 (FR) CCW
-      \            /
-       \   PICO   /
-       /    FC    \
-      /            \
-  M1 (BL) CCW     M3 (BR) CW
+```mermaid
+graph TD
+    M2(M2 FL - CW) --- FC[RP2040 FC]
+    M4(M4 FR - CCW) --- FC
+    M1(M1 BL - CCW) --- FC
+    M3(M3 BR - CW) --- FC
+    style FC fill:#6d1fde,color:#fff
+```
 
 ---
 
