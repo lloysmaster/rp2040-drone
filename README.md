@@ -18,7 +18,7 @@ Proyecto de **Controladora de Vuelo (FC)** desarrollada desde cero para el micro
 | **IMU** | MPU6500 | **SPI** (Alta Velocidad) |
 | **ESC** | BLHeli_S 20A | **DShot300** via PIO |
 | **Radio RX** | Futaba 75MHz (Vintage) | **PPM** via PIO |
-| **Motores** | Brushless 2205 | Configuración en "X" |
+| **Motores** | Brushless 2204 | Configuración en "X" |
 
 ---
 
