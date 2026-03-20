@@ -5,61 +5,70 @@
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
 
-// Archivos PIO generados (Asegúrate de tener ambos en tu CMakeLists.txt)
+// Archivos PIO generados
 #include "pio_ppm_rx.pio.h"
 #include "pio_dshot.pio.h"
 
-// --- CONFIGURACIÓN PINES ---
+// --- CONFIGURACIÓN DE PINES ---
 #define PPM_PIN          2
 #define MPU_SPI_INST     spi1
 #define PIN_MISO         12
 #define PIN_CS           13
 #define PIN_SCK          10
 #define PIN_MOSI         11
-#define MOTOR_BASE_PIN   16 // Motores en 16, 17, 18, 19
+#define MOTOR_BASE_PIN   16 // Motores en pines 16, 17, 18, 19
 
-// --- CONFIGURACIÓN MPU6500 ---
-#define REG_GYRO_CONFIG   0x1B
-#define REG_PWR_MGMT_1    0x6B
-#define REG_GYRO_XOUT_H   0x43
-#define READ_BIT          0x80
+// --- CONFIGURACIÓN MPU6500 (REGISTROS) ---
+#define REG_GYRO_CONFIG  0x1B
+#define REG_PWR_MGMT_1   0x6B
+#define REG_GYRO_XOUT_H  0x43
+#define READ_BIT         0x80
 
-// --- VARIABLES RECEPCIÓN PPM ---
-#define NUM_CHANNELS 8
-#define SYNC_THRESHOLD 2700
-uint32_t raw_values[NUM_CHANNELS];
-int current_channel = 0;
+// --- PARÁMETROS DE RECEPCIÓN PPM ---
+#define NUM_CHANNELS     8
+#define SYNC_THRESHOLD   2700
 
-
-// --- VARIABLES GLOBALES DE PRUEBA ---
-uint16_t motor_test_val = 0; // Valor manual para el motor
-
-
-
-// --- VARIABLES CONTROL Y PID ---
+// --- ESTRUCTURAS DE DATOS ---
 typedef struct {
     float kp, ki, kd;
-    float error_previo, integral;
+    float error_previo;
+    float integral;
 } pid_axis_t;
 
-pid_axis_t pid_roll  = { .kp = 0.00f, .ki = 0.000f, .kd = 0.00f };
-pid_axis_t pid_pitch = { .kp = 0.00f, .ki = 0.000f, .kd = 0.00f };
-pid_axis_t pid_yaw   = { .kp = 0.00f, .ki = 0.000f, .kd = 0.00f };
-
-// --- ESTRUCTURA DSHOT PARA 4 MOTORES ---
 typedef struct {
     PIO pio;
     uint sm;
 } motor_t;
+
+// --- VARIABLES GLOBALES ---
+uint32_t raw_values[NUM_CHANNELS];
+int current_channel = 0;
+uint16_t motor_test_val = 0; 
+
+// Filtros y offsets
+float roll_filtrado = 0;
+float pitch_filtrado = 0;
+float alpha = 0.2f; // Factor de filtro complementario/EMA
+float gyro_x_offset = 0, gyro_y_offset = 0, gyro_z_offset = 0;
+
+// Instancias de PID
+pid_axis_t pid_roll  = { .kp = 0.00f, .ki = 0.000f, .kd = 0.00f };
+pid_axis_t pid_pitch = { .kp = 0.00f, .ki = 0.000f, .kd = 0.00f };
+pid_axis_t pid_yaw   = { .kp = 0.00f, .ki = 0.000f, .kd = 0.00f };
+
+// Instancias de Motores
 motor_t motores[4];
 
-// --- PROTOTIPOS ---
+// --- PROTOTIPOS DE FUNCIONES ---
 void init_hardware();
 void process_ppm();
+void check_console_input();
+void calibrar_sensores();
 float calcular_pid(pid_axis_t *pid, float setpoint, float lectura_actual);
 void send_dshot_all(uint16_t m1, uint16_t m2, uint16_t m3, uint16_t m4);
+uint16_t dshot_prepare_packet(uint16_t value);
 
-// --- LÓGICA MPU6500 ---
+// --- FUNCIONES MPU6500 (SPI) ---
 static inline void cs_select() { gpio_put(PIN_CS, 0); }
 static inline void cs_deselect() { gpio_put(PIN_CS, 1); }
 
@@ -82,23 +91,67 @@ void mpu_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz) {
     *gz = (buffer[4] << 8) | buffer[5];
 }
 
+// --- LÓGICA DE CONTROL Y VUELO ---
+
+void calibrar_sensores() {
+    int32_t gx_sum = 0, gy_sum = 0, gz_sum = 0;
+    const int muestras = 500;
+    printf("Calibrando... NO MUEVAS EL DRON\n");
+    
+    for (int i = 0; i < muestras; i++) {
+        int16_t gx, gy, gz;
+        mpu_read_gyro(&gx, &gy, &gz);
+        gx_sum += gx;
+        gy_sum += gy;
+        gz_sum += gz;
+        sleep_us(1000);
+    }
+    gyro_x_offset = (float)gx_sum / muestras;
+    gyro_y_offset = (float)gy_sum / muestras;
+    gyro_z_offset = (float)gz_sum / muestras;
+    printf("Calibracion lista. Offsets: X:%.2f Y:%.2f\n", gyro_x_offset, gyro_y_offset);
+}
+
+float calcular_pid(pid_axis_t *pid, float setpoint, float lectura_actual) {
+    float error = setpoint - lectura_actual;
+    
+    // Término Integral con anti-windup
+    pid->integral += pid->ki * error;
+    if (pid->integral > 100) pid->integral = 100;
+    else if (pid->integral < -100) pid->integral = -100;
+    
+    // Término Derivativo
+    float d_term = pid->kd * (error - pid->error_previo);
+    pid->error_previo = error;
+    
+    return (pid->kp * error) + pid->integral + d_term;
+}
+
 // --- LÓGICA DSHOT ---
+
 uint16_t dshot_prepare_packet(uint16_t value) {
     if (value == 0) return 0;
     uint16_t packet = (value << 1); 
     uint16_t checksum = 0;
     uint16_t temp_packet = packet;
-    for (int i = 0; i < 3; i++) { checksum ^= (temp_packet & 0x0F); temp_packet >>= 4; }
+    
+    for (int i = 0; i < 3; i++) { 
+        checksum ^= (temp_packet & 0x0F); 
+        temp_packet >>= 4; 
+    }
     return (packet << 4) | (checksum & 0x0F);
 }
 
 void send_dshot_all(uint16_t m1, uint16_t m2, uint16_t m3, uint16_t m4) {
     uint16_t vals[4] = {m1, m2, m3, m4};
-    for(int i=0; i<4; i++) {
+    for(int i = 0; i < 4; i++) {
         uint16_t packet = dshot_prepare_packet(vals[i]);
         pio_sm_put_blocking(motores[i].pio, motores[i].sm, packet << 16);
     }
 }
+
+// --- COMUNICACIÓN Y ENTRADA ---
+
 void check_console_input() {
     int c = getchar_timeout_us(0);
     if (c != PICO_ERROR_TIMEOUT) {
@@ -108,142 +161,31 @@ void check_console_input() {
         if (c == '\n' || c == '\r') {
             buffer[idx] = '\0';
             if (idx > 0) {
-                // Comandos: 'M100' para motor, 'P0.5' para Kp, etc.
                 char type = buffer[0];
                 float val = atof(&buffer[1]);
 
                 if (type == 'M' || type == 'm') {
                     motor_test_val = (uint16_t)val;
-                    printf("Motor Test Set: %d\n", motor_test_val);
+                    printf(">> Motor Test Set: %d\n", motor_test_val);
                 } else if (type == 'P' || type == 'p') {
                     pid_roll.kp = pid_pitch.kp = val;
-                    printf("Kp actualizado a: %.4f\n", val);
+                    printf(">> Kp (P) actualizado a: %.4f\n", val);
+                } else if (type == 'I' || type == 'i') {
+                    pid_roll.ki = pid_pitch.ki = val;
+                    pid_roll.integral = pid_pitch.integral = 0; 
+                    printf(">> Ki (I) actualizado a: %.4f (Integral reseteada)\n", val);
                 } else if (type == 'D' || type == 'd') {
                     pid_roll.kd = pid_pitch.kd = val;
-                    printf("Kd actualizado a: %.4f\n", val);
+                    printf(">> Kd (D) actualizado a: %.4f\n", val);
+                } else if (type == 'S' || type == 's') {
+                    printf("\n--- PID STATUS ---\nP: %.4f | I: %.4f | D: %.4f\n------------------\n", 
+                            pid_roll.kp, pid_roll.ki, pid_roll.kd);
                 }
             }
             idx = 0;
-        } else {
-            if (idx < 31) buffer[idx++] = (char)c;
+        } else if (idx < 31) {
+            buffer[idx++] = (char)c;
         }
-    }
-}
-
-
-
-// --- MAIN ---
-int main() {
-    stdio_init_all();
-    init_hardware();
-
-    printf("Modo Test: Usa 'Mxxx' para motor (48-2000) o 'Pxxx' para Kp\n");
-
-    int16_t gx, gy, gz;
-    uint32_t target_loop_time_us = 2000; 
-    uint32_t next_loop_time = time_us_32();
-
-    while (true) {
-        while (time_us_32() < next_loop_time);
-        next_loop_time += target_loop_time_us;
-
-        // 0. Leer consola (No bloqueante)
-        check_console_input();
-
-        // 1. Procesar Radio
-        process_ppm();
-        float throttle_input = raw_values[2]; 
-
-        // 2. Leer Sensores
-        mpu_read_gyro(&gx, &gy, &gz);
-        float gyro_roll  = (float)gx / 16.4f;
-        float gyro_pitch = (float)gy / 16.4f;
-
-        // 3. Calcular PID
-        float setpoint_roll = ((float)raw_values[0] - 1500) / 10.0f;
-        float corr_roll = calcular_pid(&pid_roll, setpoint_roll, gyro_roll);
-        
-        // 4. Lógica de un solo motor para pruebas
-        uint16_t base_throttle = 0;
-        
-        if (motor_test_val > 0) {
-            // Si pusiste un valor por consola, ese es nuestro "piso"
-            base_throttle = motor_test_val;
-        } else {
-            // Si no, usamos el control remoto
-            base_throttle = (uint16_t)throttle_input;
-        }
-
-        // Sumamos la corrección PID al valor base
-        // Ahora m_out reaccionará al giro incluso si motor_test_val está activo
-        int16_t m_calculado = (int16_t)base_throttle - (int16_t)corr_roll;
-
-        // 5. Seguridad y DShot
-        uint16_t m_out = 0;
-        if (base_throttle < 48) {
-            m_out = 0; // Seguridad: si el base es 0, motor apagado
-        } else {
-            if (m_calculado < 48) m_out = 48;
-            else if (m_calculado > 2000) m_out = 2000;
-            else m_out = (uint16_t)m_calculado;
-        }
-
-        send_dshot_all(m_out, 0, 0, 0);
-        
-        // Telemetría rápida para ver qué pasa
-        static int count = 0;
-        if (count++ % 100 == 0) { // Cada 200ms
-            printf("G_Roll: %.2f | Out: %d | Kp: %.3f\n", gyro_roll, m_out, pid_roll.kp);
-        }
-    }
-}
-
-
-// Función para leer la consola sin bloquear el vuelo
-
-
-// ---- Fin Main -------
-
-
-
-
-// --- IMPLEMENTACIÓN DE FUNCIONES AUXILIARES ---
-
-void init_hardware() {
-    // SPI MPU6500
-    spi_init(MPU_SPI_INST, 20 * 1000 * 1000);
-    gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
-    gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
-    gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
-    gpio_init(PIN_CS);
-    gpio_set_dir(PIN_CS, GPIO_OUT);
-    gpio_put(PIN_CS, 1);
-    sleep_ms(100);
-    mpu_write(REG_PWR_MGMT_1, 0x01);
-    mpu_write(REG_GYRO_CONFIG, 0x18);
-
-    // PIO PPM (Usamos pio0, SM 0)
-    uint offset_ppm = pio_add_program(pio0, &ppm_rx_program);
-    pio_sm_config c_ppm = ppm_rx_program_get_default_config(offset_ppm);
-    sm_config_set_in_pins(&c_ppm, PPM_PIN);
-    sm_config_set_clkdiv(&c_ppm, 62.5f);
-    pio_gpio_init(pio0, PPM_PIN);
-    gpio_set_pulls(PPM_PIN, true, false);
-    pio_sm_init(pio0, 0, offset_ppm, &c_ppm);
-    pio_sm_set_enabled(pio0, 0, true);
-
-    // PIO DShot (Usamos pio1 para no saturar pio0)
-    uint offset_ds = pio_add_program(pio1, &dshot300_program);
-    for(int i=0; i<4; i++) {
-        motores[i].pio = pio1;
-        motores[i].sm = i; // Usamos los 4 SMs de pio1
-        dshot300_program_init(motores[i].pio, motores[i].sm, offset_ds, MOTOR_BASE_PIN + i);
-    }
-    
-    // Calibración/Armado ESCs
-    for (int i = 0; i < 100; i++) {
-        send_dshot_all(0,0,0,0);
-        sleep_ms(10);
     }
 }
 
@@ -259,12 +201,104 @@ void process_ppm() {
     }
 }
 
-float calcular_pid(pid_axis_t *pid, float setpoint, float lectura_actual) {
-    float error = setpoint - lectura_actual;
-    pid->integral += pid->ki * error;
-    if (pid->integral > 400) pid->integral = 400;
-    else if (pid->integral < -400) pid->integral = -400;
-    float d_term = pid->kd * (error - pid->error_previo);
-    pid->error_previo = error;
-    return (pid->kp * error) + pid->integral + d_term;
+// --- INICIALIZACIÓN DE HARDWARE ---
+
+void init_hardware() {
+    stdio_init_all();
+
+    // Configuración SPI para MPU6500
+    spi_init(MPU_SPI_INST, 20 * 1000 * 1000);
+    gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
+    gpio_init(PIN_CS);
+    gpio_set_dir(PIN_CS, GPIO_OUT);
+    gpio_put(PIN_CS, 1);
+    
+    sleep_ms(100);
+    mpu_write(REG_PWR_MGMT_1, 0x01);
+    mpu_write(REG_GYRO_CONFIG, 0x18);
+
+    // Configuración PIO PPM (pio0, SM 0)
+    uint offset_ppm = pio_add_program(pio0, &ppm_rx_program);
+    pio_sm_config c_ppm = ppm_rx_program_get_default_config(offset_ppm);
+    sm_config_set_in_pins(&c_ppm, PPM_PIN);
+    sm_config_set_clkdiv(&c_ppm, 62.5f);
+    pio_gpio_init(pio0, PPM_PIN);
+    gpio_set_pulls(PPM_PIN, true, false);
+    pio_sm_init(pio0, 0, offset_ppm, &c_ppm);
+    pio_sm_set_enabled(pio0, 0, true);
+
+    // Configuración PIO DShot (pio1, 4 SMs)
+    uint offset_ds = pio_add_program(pio1, &dshot300_program);
+    for(int i = 0; i < 4; i++) {
+        motores[i].pio = pio1;
+        motores[i].sm = i;
+        dshot300_program_init(motores[i].pio, motores[i].sm, offset_ds, MOTOR_BASE_PIN + i);
+    }
+    
+    // Inicialización ESCs (Armado)
+    for (int i = 0; i < 100; i++) {
+        send_dshot_all(0, 0, 0, 0);
+        sleep_ms(10);
+    }
+
+    calibrar_sensores();
+}
+
+// --- BUCLE PRINCIPAL (MAIN) ---
+
+int main() {
+    init_hardware();
+    printf("Modo Test: Usa 'Mxxx' para motor (48-2000) o 'Pxxx' para Kp\n");
+
+    int16_t gx, gy, gz;
+    uint32_t target_loop_time_us = 2000; // Frecuencia de 500Hz
+    uint32_t next_loop_time = time_us_32();
+
+    while (true) {
+        // Control de tiempo del loop
+        while (time_us_32() < next_loop_time);
+        next_loop_time += target_loop_time_us;
+
+        // 1. Entradas (Consola y Radio)
+        check_console_input();
+        process_ppm();
+        float throttle_input = raw_values[2]; 
+
+        // 2. Sensores y Filtrado
+        mpu_read_gyro(&gx, &gy, &gz);
+        float roll_raw = ((float)gx - gyro_x_offset) / 16.4f;
+        float pitch_raw = ((float)gy - gyro_y_offset) / 16.4f;
+
+        roll_filtrado = (roll_filtrado * (1.0f - alpha)) + (roll_raw * alpha);
+        pitch_filtrado = (pitch_filtrado * (1.0f - alpha)) + (pitch_raw * alpha);
+
+        // 3. Procesamiento PID
+        float setpoint_roll = ((float)raw_values[0] - 1500) / 10.0f;
+        float corr_roll = calcular_pid(&pid_roll, setpoint_roll, roll_filtrado);
+        
+        // 4. Mezcla de Motores (Mixer simplificado para pruebas)
+        uint16_t base_throttle = (motor_test_val > 0) ? motor_test_val : (uint16_t)throttle_input;
+        int16_t m_calculado = (int16_t)base_throttle - (int16_t)corr_roll;
+
+        // 5. Salida DShot y Seguridad
+        uint16_t m_out = 0;
+        if (base_throttle < 48) {
+            m_out = 0; 
+        } else {
+            if (m_calculado < 48) m_out = 48;
+            else if (m_calculado > 2000) m_out = 2000;
+            else m_out = (uint16_t)m_calculado;
+        }
+
+        send_dshot_all(m_out, 0, 0, 0);
+        
+        // 6. Telemetría (Cada ~200ms)
+        static int count = 0;
+        if (count++ % 100 == 0) {
+            printf("G_Roll: %6.2f | Out: %4d | PID [P:%.3f I:%.3f D:%.3f]\n", 
+                    roll_filtrado, m_out, pid_roll.kp, pid_roll.ki, pid_roll.kd);
+        }
+    }
 }
