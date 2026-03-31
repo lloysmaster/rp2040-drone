@@ -4,10 +4,8 @@
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
 #include "pio_ppm_rx.pio.h"
+#include "config.h"
 
-// Rango de valores DShot: 0 (Stop), 1-47 (Reservado), 48-2047 (Throttle)
-#define DSHOT_MIN_THROTTLE 48
-#define DSHOT_MAX_THROTTLE 2000
 
 typedef struct {
     PIO pio;

@@ -55,12 +55,12 @@ void init_hardware()
     mpu6500_write_reg(REG_GYRO_CONFIG, 0x18);
 
     radio_init(&receptor, pio0, 0, PPM_PIN);
-    filter_init(&filter_roll, 0.2f);
-    filter_init(&filter_pitch, 0.2f);
-    filter_init(&filter_yaw, 0.2f);
+    filter_init(&filter_roll, FILTER_ALPHA);
+    filter_init(&filter_pitch, FILTER_ALPHA);
+    filter_init(&filter_yaw, FILTER_ALPHA);
 
     // Inicializar con límites de anti-windup (ej: 100)
-    pid_init(&pid_roll, 0.0f, 0.0f, 0.0f, 100.0f);
+    pid_init(&pid_roll, ROLL_KP, ROLL_KI, ROLL_KD, PID_LIMIT_I);
     pid_init(&pid_pitch, 0.0f, 0.0f, 0.0f, 100.0f);
     pid_init(&pid_yaw, 0.0f, 0.0f, 0.0f, 100.0f);
 
@@ -70,8 +70,10 @@ void init_hardware()
 
     mpu6500_calibrate(&gyro_x_offset, &gyro_y_offset, &gyro_z_offset);
 }
-void core1_entry() {
-    while (true) {
+void core1_entry()
+{
+    while (true)
+    {
         // 1. Actualizar Radio (Tarea intensiva en chequeo de FIFO)
         mutex_enter_blocking(&my_mutex);
         radio_update(&receptor);
@@ -85,11 +87,12 @@ void core1_entry() {
 
         // 3. Telemetría (~25Hz)
         static uint32_t last_telemetry = 0;
-        if (time_us_32() - last_telemetry > 40000) { 
+        if (time_us_32() - last_telemetry > 40000)
+        {
             telemetry_send(&t_data);
             last_telemetry = time_us_32();
         }
-        
+
         // Pequeño delay para no saturar el bus si no hay nada que hacer
         sleep_us(100);
     }
@@ -108,21 +111,20 @@ int main()
         // Control de tiempo del loop
         while (time_us_32() < next_loop_time)
             ;
-        
-        
+
         next_loop_time += TARGET_LOOP_US;
 
         // 1. Entradas (Consola y Radio)
-        uint32_t chan_aileron  = radio_get_channel(&receptor, 0); // Roll
-uint32_t chan_elevator = radio_get_channel(&receptor, 1); // Pitch
-uint32_t chan_throttle = radio_get_channel(&receptor, 2); // Throttle
-uint32_t chan_rudder   = radio_get_channel(&receptor, 3); // Yaw
+        uint32_t chan_aileron = radio_get_channel(&receptor, 0);  // Roll
+        uint32_t chan_elevator = radio_get_channel(&receptor, 1); // Pitch
+        uint32_t chan_throttle = radio_get_channel(&receptor, 2); // Throttle
+        uint32_t chan_rudder = radio_get_channel(&receptor, 3);   // Yaw
 
         // 2. Sensores y Filtrado
         mpu6500_read_raw(&gx, &gy, &gz);
-        float roll_raw = ((float)gx - gyro_x_offset) / 16.4f;
-        float pitch_raw = ((float)gy - gyro_y_offset) / 16.4f;
-        float yaw_raw = ((float)gz - gyro_z_offset) / 16.4f;
+        float roll_raw = ((float)gx - gyro_x_offset) / GYRO_SCALE;
+        float pitch_raw = ((float)gy - gyro_y_offset) / GYRO_SCALE;
+        float yaw_raw = ((float)gz - gyro_z_offset) / GYRO_SCALE;
 
         // Aplicar filtros
         float roll_f = filter_apply(&filter_roll, roll_raw);
@@ -131,53 +133,57 @@ uint32_t chan_rudder   = radio_get_channel(&receptor, 3); // Yaw
 
         // 3. Procesamiento PID
         mutex_enter_blocking(&my_mutex);
-        float setpoint_roll  = ((float)chan_aileron - 1500) / 10.0f;
-        float setpoint_pitch = ((float)chan_elevator - 1500) / 10.0f;
-        float setpoint_yaw   = ((float)chan_rudder - 1500) / 10.0f; // Asumiendo CH4 es Yaw
+        float setpoint_roll = ((float)chan_aileron - 1500) / STICK_SENSITIVITY;
+        float setpoint_pitch = ((float)chan_elevator - 1500) / STICK_SENSITIVITY;
+        float setpoint_yaw = ((float)chan_rudder - 1500) / STICK_SENSITIVITY; // Asumiendo CH4 es Yaw
         mutex_exit(&my_mutex);
 
         float corr_roll = pid_update(&pid_roll, setpoint_roll, roll_f);
         float corr_pitch = pid_update(&pid_pitch, setpoint_pitch, pitch_f);
         float corr_yaw = pid_update(&pid_yaw, setpoint_yaw, yaw_f);
-if (motor_test_val > 10000) {
-    // Si el valor es especial, enviamos comando de Beacon
-    uint16_t beacon_cmd = motor_test_val - 10000;
-    
-    // IMPORTANTE: Para que el ESC acepte un comando, el bit de telemetría 
-    // suele ser necesario o el comando debe repetirse.
-    dshot_send_all(&esc_motores, beacon_cmd, beacon_cmd, beacon_cmd, beacon_cmd);
-    
-    // Opcional: El beacon suele sonar mejor si se envía en ráfagas o 
-    // simplemente se deja de enviar aceleración.
-} else {
-        // 1. Obtenemos el valor real del acelerador del radio (mapeado de 1000-2000 a 0-1000 aprox, o según tu mixer)
-        int32_t throttle_val = (int32_t)chan_throttle - 1000;
-    if (throttle_val < 50) throttle_val = 0; 
-    
-    // Sumamos el valor de consola (test) y limitamos a 1000
-    uint16_t total_throttle = (uint16_t)(throttle_val + motor_test_val);
-    if (total_throttle > 1000) total_throttle = 1000;
+        if (motor_test_val > 10000)
+        {
+            // Si el valor es especial, enviamos comando de Beacon
+            uint16_t beacon_cmd = motor_test_val - 10000;
 
-    motor_output_t m_out = mixer_compute(total_throttle, corr_roll, corr_pitch, corr_yaw);
-    dshot_send_all(&esc_motores, m_out.m1, m_out.m2, m_out.m3, m_out.m4);
+            // IMPORTANTE: Para que el ESC acepte un comando, el bit de telemetría
+            // suele ser necesario o el comando debe repetirse.
+            dshot_send_all(&esc_motores, beacon_cmd, beacon_cmd, beacon_cmd, beacon_cmd);
 
-        // 6. Telemetría actualizada
-        static int count = 0;
-        if (count++ % 20 == 0)
-        { // Frecuencia de ~25Hz a 500Hz de loop
-            t_data.roll = roll_f;
-            t_data.pitch = pitch_f;
-            t_data.yaw = yaw_f;
-            t_data.motors[0] = m_out.m1;
-            t_data.motors[1] = m_out.m2;
-            t_data.motors[2] = m_out.m3;
-            t_data.motors[3] = m_out.m4;
-            t_data.throttle = total_throttle;
+            // Opcional: El beacon suele sonar mejor si se envía en ráfagas o
+            // simplemente se deja de enviar aceleración.
+        }
+        else
+        {
+            // 1. Obtenemos el valor real del acelerador del radio (mapeado de 1000-2000 a 0-1000 aprox, o según tu mixer)
+            int32_t throttle_val = (int32_t)chan_throttle - 1000;
+            if (throttle_val < 50)
+                throttle_val = 0;
 
-            telemetry_send(&t_data);
+            // Sumamos el valor de consola (test) y limitamos a 1000
+            uint16_t total_throttle = (uint16_t)(throttle_val + motor_test_val);
+            if (total_throttle > 1000)
+                total_throttle = 1000;
+
+            motor_output_t m_out = mixer_compute(total_throttle, corr_roll, corr_pitch, corr_yaw);
+            dshot_send_all(&esc_motores, m_out.m1, m_out.m2, m_out.m3, m_out.m4);
+
+            // 6. Telemetría actualizada
+            static int count = 0;
+            if (count++ % 20 == 0)
+            { // Frecuencia de ~25Hz a 500Hz de loop
+                t_data.roll = roll_f;
+                t_data.pitch = pitch_f;
+                t_data.yaw = yaw_f;
+                t_data.motors[0] = m_out.m1;
+                t_data.motors[1] = m_out.m2;
+                t_data.motors[2] = m_out.m3;
+                t_data.motors[3] = m_out.m4;
+                t_data.throttle = total_throttle;
+
+                telemetry_send(&t_data);
+            }
         }
     }
-    }
     // --- CORE 1: COMUNICACIONES Y TAREAS LENTAS ---
-
 }

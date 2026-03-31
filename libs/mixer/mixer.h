@@ -2,10 +2,7 @@
 #define MIXER_H
 
 #include <stdint.h>
-
-#define DSHOT_MIN_THROTTLE 48
-#define DSHOT_MAX_THROTTLE 2000
-#define MOTOR_IDLE_THRESHOLD 50 // Umbral para considerar motores apagados
+#include "config.h"
 
 typedef struct {
     uint16_t m1;

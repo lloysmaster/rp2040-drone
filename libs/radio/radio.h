@@ -3,9 +3,8 @@
 
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
+#include "config.h"
 
-#define NUM_CHANNELS 8
-#define SYNC_THRESHOLD 2700
 
 // Estructura para manejar la instancia del receptor
 typedef struct {
