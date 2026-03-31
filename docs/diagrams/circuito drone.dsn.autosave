@@ -99,7 +99,7 @@ download the executable.-->
 			<COLOR>FF0080</COLOR>
 			<THICKNESS>2</THICKNESS>
 		</STYLE>
-		<STYLE id='9'>
+		<STYLE id='8'>
 			<STYLE>0</STYLE>
 			<COLOR>008080</COLOR>
 			<THICKNESS>2</THICKNESS>
@@ -736,7 +736,7 @@ download the executable.-->
 		<WIRE style='3' a='176.00000,78.00000' b='176.00000,60.00000'/>
 		<WIRE style='3' a='150.00000,78.00000' b='150.00000,58.00000'/>
 		<JUNCTION pos='118.00000,78.00000'/>
-		<WIRE style='9' a='120.00000,98.00000' b='118.00000,98.00000'/>
+		<WIRE style='8' a='120.00000,98.00000' b='118.00000,98.00000'/>
 		<SYMBOL id='5' pos='106.00000,106.00000' part='0' rotate='3' can_scale='0' show_power='0' scale_x='1.00000' scale_y='1.00000'>
 			<FIELD type='0' description='Ref' value='rc 75mhz' show='0' pos='-16.00000,2.00000'/>
 			<FIELD type='0' description='Name' value='' show='1' pos='-16.00000,-14.00000'/>
@@ -753,9 +753,9 @@ download the executable.-->
 			<HINT pin='1' net='62'/>
 			<HINT pin='2' net='64'/>
 		</SYMBOL>
-		<WIRE style='9' a='113.00000,98.00000' b='98.00000,98.00000'/>
+		<WIRE style='8' a='113.00000,98.00000' b='98.00000,98.00000'/>
 		<JUNCTION pos='113.00000,98.00000'/>
-		<WIRE style='9' a='114.00000,98.00000' b='113.00000,98.00000'/>
+		<WIRE style='8' a='114.00000,98.00000' b='113.00000,98.00000'/>
 		<WIRE style='2' a='138.00000,90.00000' b='142.00000,90.00000'/>
 		<TEXT pos='142.00000,90.00000' direction='3' font='3' color='000000'>5v</TEXT>
 		<JUNCTION pos='150.00000,78.00000'/>
@@ -830,7 +830,7 @@ download the executable.-->
 		<JUNCTION pos='158.00000,72.00000'/>
 		<WIRE style='5' a='126.00000,72.00000' b='158.00000,72.00000'/>
 		<JUNCTION pos='120.00000,98.00000'/>
-		<WIRE style='9' a='124.00000,98.00000' b='120.00000,98.00000'/>
+		<WIRE style='8' a='124.00000,98.00000' b='120.00000,98.00000'/>
 		<SYMBOL id='9' pos='70.00000,70.00000' part='0' rotate='6' can_scale='0' show_power='0' scale_x='1.00000' scale_y='1.00000'>
 			<FIELD type='0' description='Ref' value='C?' show='1' pos='-14.00000,2.00000'/>
 			<FIELD type='0' description='Name' value='capacitor 35v 450uf' show='1' pos='-14.00000,-8.00000'/>

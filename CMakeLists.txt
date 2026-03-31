@@ -25,15 +25,38 @@ set(CMAKE_CXX_STANDARD 17)
 
 # Inicializar el SDK
 pico_sdk_init()
+# Esto es VITAL para que encuentre config.h, radio.h y mpu6500.h
+
 
 add_executable(rp2040droneUpdated
     rp2040droneUpdated.c
+    libs/radio/radio.c
+    libs/mpu6500/mpu6500.c
+    libs/pid/pid.c
+    libs/esc/dshot.c
+    libs/telemetry/telemetry.c
+    libs/console_handler/console_handler.c
+    libs/mixer/mixer.c
+    libs/filter/filter.c
+)
+target_include_directories(rp2040droneUpdated PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/libs/include
+    ${CMAKE_CURRENT_LIST_DIR}/libs/radio
+    ${CMAKE_CURRENT_LIST_DIR}/libs/mpu6500
+    ${CMAKE_CURRENT_LIST_DIR}/libs/pid
+    ${CMAKE_CURRENT_LIST_DIR}/libs/esc
+    ${CMAKE_CURRENT_LIST_DIR}/libs/telemetry
+    ${CMAKE_CURRENT_LIST_DIR}/libs/console_handler
+    ${CMAKE_CURRENT_LIST_DIR}/libs/mixer
+    ${CMAKE_CURRENT_LIST_DIR}/libs/filter
+    ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 # --- GENERACIÓN DE CÓDIGO PIO ---
 # Esto genera los archivos .pio.h a partir de tus archivos .pio
-pico_generate_pio_header(rp2040droneUpdated ${CMAKE_CURRENT_LIST_DIR}/pio_ppm_rx.pio)
-pico_generate_pio_header(rp2040droneUpdated ${CMAKE_CURRENT_LIST_DIR}/pio_dshot.pio)
+pico_generate_pio_header(rp2040droneUpdated ${CMAKE_CURRENT_LIST_DIR}/libs/pio/pio_ppm_rx.pio)
+pico_generate_pio_header(rp2040droneUpdated ${CMAKE_CURRENT_LIST_DIR}/libs/pio/pio_dshot.pio)
 
 # --- LIBRERÍAS DE HARDWARE ---
 # Aquí es donde arreglamos tu error de "hardware/spi.h"
@@ -42,6 +65,7 @@ target_link_libraries(rp2040droneUpdated
     hardware_spi 
     hardware_pio 
     hardware_clocks
+    pico_multicore
 )
 
 # Habilitar salida USB para depuración (printf)

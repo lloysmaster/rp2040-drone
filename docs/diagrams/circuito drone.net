@@ -1,0 +1,72 @@
+*PADS-PCB*
+*PART*
+rp2040  rp2040
+mpu6500 mpu6500
+BLM     package name for PCB layout
+esc Dshot package name for PCB layout
+rc 75mhz radio reciever 75mhz
+1n1111  This part has no 'Package' attribute
+switch regulator pcb
+3s 11.1v 3s lipo
+C?      This part has no 'Package' attribute
+
+*NET*
+*SIGNAL*  N000062
+rp2040.5 1n1111.1
+*SIGNAL*  N000016
+rp2040.21 esc Dshot.4
+*SIGNAL*  N000018
+rp2040.23 esc Dshot.4
+*SIGNAL*  N000019
+rp2040.24 esc Dshot.1 esc Dshot.1 esc Dshot.1 esc Dshot.1
+*SIGNAL*  N000020
+rp2040.25 esc Dshot.4
+*SIGNAL*  N000032
+mpu6500.1 rp2040.36
+*SIGNAL*  N000033
+mpu6500.2 rp2040.33
+*SIGNAL*  N000034
+mpu6500.3 rp2040.16
+*SIGNAL*  N000035
+mpu6500.4 rp2040.17
+*SIGNAL*  N000038
+mpu6500.7 rp2040.14
+*SIGNAL*  N000040
+mpu6500.9 rp2040.15
+*SIGNAL*  N000042
+BLM.1 esc Dshot.1
+*SIGNAL*  N000017
+BLM.2 esc Dshot.2
+*SIGNAL*  N000044
+BLM.3 esc Dshot.3
+*SIGNAL*  N000047
+BLM.1 esc Dshot.1
+*SIGNAL*  N000048
+BLM.2 esc Dshot.2
+*SIGNAL*  N000046
+BLM.3 esc Dshot.3
+*SIGNAL*  N000052
+BLM.1 esc Dshot.1
+*SIGNAL*  N000053
+BLM.2 esc Dshot.2
+*SIGNAL*  N000054
+BLM.3 esc Dshot.3
+*SIGNAL*  N000057
+BLM.1 esc Dshot.1
+*SIGNAL*  N000058
+BLM.2 esc Dshot.2
+*SIGNAL*  N000059
+BLM.3 esc Dshot.3
+*SIGNAL*  N000068
+esc Dshot.4 rp2040.22
+*SIGNAL*  N000064
+1n1111.2 rc 75mhz.2
+*SIGNAL*  N000065
+switch regulator. rc 75mhz.3 rp2040.40
+*SIGNAL*  N000066
+switch regulator.2 rc 75mhz.1 rp2040.38
+*SIGNAL*  N000067
+3s 11.1v.1 esc Dshot.3 esc Dshot.3 esc Dshot.3 esc Dshot.3 C?.2 switch regulator.3
+*SIGNAL*  N000069
+3s 11.1v.2 esc Dshot.2 esc Dshot.2 esc Dshot.2 esc Dshot.2 C?.1 switch regulator.4
+*END*

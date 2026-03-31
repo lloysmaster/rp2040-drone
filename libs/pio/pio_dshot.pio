@@ -22,6 +22,7 @@ check_loop:
 .wrap
 
 % c-sdk {
+#include "hardware/clocks.h"
 static inline void dshot300_program_init(PIO pio, uint sm, uint offset, uint pin) {
     pio_sm_config c = dshot300_program_get_default_config(offset);
 
