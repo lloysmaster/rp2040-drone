@@ -1,11 +1,11 @@
 #include "mixer.h"
 
 static uint16_t constrain_motor(int16_t value, uint16_t throttle) {
-    if (throttle < MOTOR_IDLE_THRESHOLD) {
+    if (throttle < IDLE_THRESHOLD) {
         return 0;
     }
-    if (value < DSHOT_MIN_THROTTLE) return DSHOT_MIN_THROTTLE;
-    if (value > DSHOT_MAX_THROTTLE) return DSHOT_MAX_THROTTLE;
+    if (value < DSHOT_MIN) return DSHOT_MIN;
+    if (value > DSHOT_MAX) return DSHOT_MAX;
     return (uint16_t)value;
 }
 
