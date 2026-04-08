@@ -30,7 +30,7 @@ Proyecto de **Controladora de Vuelo (FC)** desarrollada desde cero para el micro
 
 ## 🚀 Estado del Desarrollo
 
-Actualmente el sistema procesa la señal de radio y estabiliza los motores en un loop de **500Hz**.
+Actualmente el sistema procesa la señal de radio y estabiliza los motores en un loop de **500Hz** para pruebas, actualmente 8khz.
 
 - [x] **Lectura de Sensores:** Comunicación SPI con el MPU6500.
 - [x] **Decodificador PPM:** Implementado en PIO para no cargar la CPU.
