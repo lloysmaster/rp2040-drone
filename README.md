@@ -8,6 +8,7 @@ Proyecto de **Controladora de Vuelo (FC)** desarrollada desde cero para el micro
 ![drone_image](assets/drone_image.jpeg)
 
 [configurador personalizado](https://lloysmaster.github.io/)
+/
  [repositorio](https://github.com/lloysmaster/lloysmaster.github.io)
 ![drone_image](assets/droneConfigurator.png)
 
