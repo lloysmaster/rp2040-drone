@@ -61,8 +61,8 @@ void init_hardware()
 
     // Inicializar con límites de anti-windup (ej: 100)
     pid_init(&pid_roll, ROLL_KP, ROLL_KI, ROLL_KD, PID_LIMIT_I);
-    pid_init(&pid_pitch, 0.0f, 0.0f, 0.0f, 100.0f);
-    pid_init(&pid_yaw, 0.0f, 0.0f, 0.0f, 100.0f);
+    pid_init(&pid_pitch, PITCH_KP, PITCH_KI, PITCH_KD, PID_LIMIT_I);
+    pid_init(&pid_yaw, YAW_KP, YAW_KI, YAW_KD, PID_LIMIT_I);
 
     // Configuración PIO DShot (pio1, 4 SMs)
     uint offset_ds = pio_add_program(pio1, &dshot300_program);
@@ -74,15 +74,14 @@ void core1_entry()
 {
     while (true)
     {
-        // 1. Actualizar Radio (Tarea intensiva en chequeo de FIFO)
+        // 1. Actualizar Radio
         mutex_enter_blocking(&my_mutex);
         radio_update(&receptor);
         mutex_exit(&my_mutex);
-
-        // 2. Manejar Consola (Puede ser lento por UART)
-        // Bloqueamos brevemente para actualizar PIDs si la consola lo pide
+        // 2. Manejar Consola (Ahora con los 3 ejes)
         mutex_enter_blocking(&my_mutex);
-        console_handle_input(&pid_roll, &pid_pitch, &motor_test_val);
+        // Agregamos &pid_yaw a los argumentos
+        console_handle_input(&pid_roll, &pid_pitch, &pid_yaw, &motor_test_val);
         mutex_exit(&my_mutex);
 
         // 3. Telemetría (~25Hz)
@@ -93,7 +92,6 @@ void core1_entry()
             last_telemetry = time_us_32();
         }
 
-        // Pequeño delay para no saturar el bus si no hay nada que hacer
         sleep_us(100);
     }
 }

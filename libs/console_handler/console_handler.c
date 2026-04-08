@@ -3,7 +3,9 @@
 #include <stdlib.h>
 #include "pico/stdlib.h"
 
-void console_handle_input(pid_axis_t *roll, pid_axis_t *pitch, uint16_t *motor_test_val) {
+// console_handler.c
+
+void console_handle_input(pid_axis_t *roll, pid_axis_t *pitch, pid_axis_t *yaw, uint16_t *motor_test_val) {
     int c = getchar_timeout_us(0);
     if (c == PICO_ERROR_TIMEOUT) return;
 
@@ -14,46 +16,53 @@ void console_handle_input(pid_axis_t *roll, pid_axis_t *pitch, uint16_t *motor_t
         buffer[idx] = '\0';
         if (idx > 0) {
             char type = buffer[0];
-            float val = atof(&buffer[1]);
+            char subtype = buffer[1];
+            float val = atof(&buffer[2]);
 
             switch (type) {
                 case 'M': case 'm':
-                    *motor_test_val = (uint16_t)val;
+                    *motor_test_val = (uint16_t)atof(&buffer[1]);
                     printf(">> Motor Test Set: %d\n", *motor_test_val);
                     break;
 
-                case 'P': case 'p':
-                    roll->kp = pitch->kp = val;
-                    printf(">> Kp actualizado: %.4f\n", val);
+                case 'R': case 'r': // Configurar Roll
+                    if (subtype == 'P' || subtype == 'p') roll->kp = val;
+                    else if (subtype == 'I' || subtype == 'i') roll->ki = val;
+                    else if (subtype == 'D' || subtype == 'd') roll->kd = val;
+                    printf(">> Roll PID actualizado\n");
                     break;
 
-                case 'I': case 'i':
-                    roll->ki = pitch->ki = val;
-                    roll->integral = pitch->integral = 0; // Reset por seguridad
-                    printf(">> Ki actualizado: %.4f (Integral reseteada)\n", val);
+                case 'P': case 'p': // Configurar Pitch
+                    if (subtype == 'P' || subtype == 'p') pitch->kp = val;
+                    else if (subtype == 'I' || subtype == 'i') pitch->ki = val;
+                    else if (subtype == 'D' || subtype == 'd') pitch->kd = val;
+                    printf(">> Pitch PID actualizado\n");
+                    break;
+               
+                 case 'Y': case 'y': // Configurar Yaw
+                    if (subtype == 'P' || subtype == 'p') yaw->kp = val;
+                    else if (subtype == 'I' || subtype == 'i') yaw->ki = val;
+                    else if (subtype == 'D' || subtype == 'd') yaw->kd = val;
+                    printf(">> Yaw PID actualizado\n");
                     break;
 
-                case 'D': case 'd':
-                    roll->kd = pitch->kd = val;
-                    printf(">> Kd actualizado: %.4f\n", val);
-                    break;
+                case 'S': case 's': // Estatus general optimizado para JS
+    // Formato: #roll_kp,roll_ki,roll_kd,pitch_kp,pitch_ki,pitch_kd,yaw_kp,yaw_ki,yaw_kd
+    printf("#%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n",
+           roll->kp, roll->ki, roll->kd,
+           pitch->kp, pitch->ki, pitch->kd,
+           yaw->kp, yaw->ki, yaw->kd);
+    break;
 
-                case 'S': case 's':
-                    printf("\n--- PID STATUS ---\nP: %.4f | I: %.4f | D: %.4f\n", 
-                            roll->kp, roll->ki, roll->kd);
-                    break;
-                    case 'B': case 'b':
+                case 'B': case 'b': // Beacon DShot
                     if (val >= 1 && val <= 5) {
-                    // Usamos motor_test_val temporalmente para señalizar un comando
-                    // O mejor, pasamos una bandera de comando. 
-                    // Por ahora, usemos un valor especial que el main reconozca.
-                    *motor_test_val = 10000 + (uint16_t)val; 
-                    printf(">> DShot Beacon Nivel %d activado\n", (int)val);
+                        *motor_test_val = 10000 + (uint16_t)val;
+                        printf(">> DShot Beacon Nivel %d activado\n", (int)val);
                     } else {
-                         *motor_test_val = 0;
-                    printf(">> Beacon desactivado\n");
+                        *motor_test_val = 0;
+                        printf(">> Beacon desactivado\n");
                     }
-                     break;
+                    break;
             }
         }
         idx = 0;

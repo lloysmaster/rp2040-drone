@@ -7,6 +7,9 @@
 Proyecto de **Controladora de Vuelo (FC)** desarrollada desde cero para el microcontrolador **RP2040**. Este firmware aprovecha las capacidades de hardware de la Raspberry Pi Pico (específicamente los bloques PIO) para gestionar protocolos de baja latencia.
 ![drone_image](assets/drone_image.jpeg)
 
+configurador personalizado
+![drone_image](assets/droneConfigurator.png)
+
 
 ---
 
