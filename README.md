@@ -23,7 +23,7 @@ Proyecto de **Controladora de Vuelo (FC)** desarrollada desde cero para el micro
 | **MCU** | Raspberry Pi Pico (RP2040) | Dual Core @ 125MHz |
 | **IMU** | MPU6500 | **SPI** (Alta Velocidad) |
 | **ESC** | BLHeli_S 20A | **DShot300** via PIO |
-| **Radio RX** | Futaba 75MHz (Vintage) | **PPM** via PIO |
+| **Radio RX** | Futaba 72MHz (Vintage) | **PPM** via PIO |
 | **Motores** | Brushless 2204 | Configuración en "X" |
 
 ---
@@ -32,7 +32,7 @@ Proyecto de **Controladora de Vuelo (FC)** desarrollada desde cero para el micro
 
 Actualmente el sistema procesa la señal de radio y estabiliza los motores en un loop de **500Hz**.
 
-- [x] **Lectura de Sensores:** Comunicación SPI estable con el MPU6500.
+- [x] **Lectura de Sensores:** Comunicación SPI con el MPU6500.
 - [x] **Decodificador PPM:** Implementado en PIO para no cargar la CPU.
 - [x] **Driver DShot:** Generación de tramas digitales para ESCs modernos.
 - [y] **PID Control:** Estructura base funcional (en proceso de ajuste de constantes).
@@ -58,6 +58,7 @@ Si tienes experiencia en estas áreas, tu feedback sería de gran ayuda:
 * **Filtros:** Implementación de filtros (complementario o Kalman) para el ruido del giroscopio.
 * **Control:** Sugerencias para el tuneo de las constantes PID.
 * **PIO:** Optimizaciones en el uso de los State Machines del RP2040.
+* **buenas practicas de codigo c/programacion de microcontroladores en c**
 
 > [!IMPORTANT]
 > **Seguridad:** Si decides clonar o probar este firmware, asegúrate de retirar las hélices de los motores por seguridad.
