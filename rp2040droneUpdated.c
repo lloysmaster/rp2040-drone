@@ -6,6 +6,7 @@
 #include "hardware/clocks.h"
 #include "pico/multicore.h"
 #include "pico/mutex.h"
+
 // includes de libs
 #include "config.h"
 #include "mpu6500.h"
@@ -28,7 +29,7 @@ uint16_t motor_test_val = 0;
 telemetry_data_t t_data;
 ema_filter_t filter_roll, filter_pitch, filter_yaw;
 
-auto_init_mutex(my_mutex);
+mutex_t my_mutex;
 
 void core1_entry();
 
@@ -72,33 +73,36 @@ void init_hardware()
 }
 void core1_entry()
 {
-    while (true)
-    {
-        // 1. Actualizar Radio
-        mutex_enter_blocking(&my_mutex);
-        radio_update(&receptor);
-        mutex_exit(&my_mutex);
-        // 2. Manejar Consola (Ahora con los 3 ejes)
-        mutex_enter_blocking(&my_mutex);
-        // Agregamos &pid_yaw a los argumentos
-        console_handle_input(&pid_roll, &pid_pitch, &pid_yaw, &motor_test_val);
-        mutex_exit(&my_mutex);
+    uint32_t last_telemetry = 0;
+    uint32_t last_radio     = 0;
 
-        // 3. Telemetría (~25Hz)
-        static uint32_t last_telemetry = 0;
-        if (time_us_32() - last_telemetry > 40000)
-        {
-            telemetry_send(&t_data);
+    while (true) {
+        uint32_t now = time_us_32();
+
+        // Radio a 500 Hz (cada 2 ms) — tu receptor PPM va a 500 Hz
+        if (now - last_radio >= 2000) {
+            radio_update(&receptor);
+            last_radio = now;
+        }
+
+        // Telemetría a ~25 Hz
+        if (now - last_telemetry >= 40000) {
+            telemetry_data_t snapshot;
+            mutex_enter_blocking(&my_mutex);
+            snapshot = t_data;
+            mutex_exit(&my_mutex);
+            telemetry_send(&snapshot);
             last_telemetry = time_us_32();
         }
 
-        sleep_us(100);
+        console_handle_input(&pid_roll, &pid_pitch, &pid_yaw, &motor_test_val);
     }
 }
 // --- BUCLE PRINCIPAL (MAIN) ---
 
 int main()
 {
+    mutex_init(&my_mutex);
     init_hardware();
     multicore_launch_core1(core1_entry);
     int16_t gx, gy, gz;
@@ -118,6 +122,42 @@ int main()
         uint32_t chan_throttle = radio_get_channel(&receptor, 2); // Throttle
         uint32_t chan_rudder = radio_get_channel(&receptor, 3);   // Yaw
 
+        static bool armed = false;
+        bool arm_switch = (radio_get_channel(&receptor, 4) > 1500); // CH5
+
+
+bool test_mode  = (motor_test_val > 0); // ← armado virtual por consola
+
+if (!armed && !test_mode)
+{
+    if (arm_switch && chan_throttle < 1050)
+    {
+        armed = true;
+        pid_reset(&pid_roll);
+        pid_reset(&pid_pitch);
+        pid_reset(&pid_yaw);
+    }
+    dshot_send_all(&esc_motores, 0, 0, 0, 0);
+    continue;
+}
+
+// Desarmado en vuelo (solo si no estamos en test)
+if (!arm_switch && !test_mode)
+{
+    armed = false;
+    dshot_send_all(&esc_motores, 0, 0, 0, 0);
+    continue;
+}
+        static uint32_t last_valid_ppm = 0;
+uint32_t throttle_check = radio_get_channel(&receptor, 2);
+if (throttle_check >= 900 && throttle_check <= 2100)
+{
+    last_valid_ppm = time_us_32();
+} else if (!test_mode && time_us_32() - last_valid_ppm > 1500000) {
+    armed = false;
+    dshot_send_all(&esc_motores, 0, 0, 0, 0);
+    continue;
+}
         // 2. Sensores y Filtrado
         mpu6500_read_raw(&gx, &gy, &gz);
         float roll_raw = ((float)gx - gyro_x_offset) / GYRO_SCALE;
@@ -130,11 +170,9 @@ int main()
         float yaw_f = filter_apply(&filter_yaw, yaw_raw);
 
         // 3. Procesamiento PID
-        mutex_enter_blocking(&my_mutex);
         float setpoint_roll = ((float)chan_aileron - 1500) / STICK_SENSITIVITY;
         float setpoint_pitch = ((float)chan_elevator - 1500) / STICK_SENSITIVITY;
         float setpoint_yaw = ((float)chan_rudder - 1500) / STICK_SENSITIVITY; // Asumiendo CH4 es Yaw
-        mutex_exit(&my_mutex);
 
         float corr_roll = pid_update(&pid_roll, setpoint_roll, roll_f);
         float corr_pitch = pid_update(&pid_pitch, setpoint_pitch, pitch_f);
@@ -168,20 +206,20 @@ int main()
 
             // 6. Telemetría actualizada
             static int count = 0;
-            if (count++ % 20 == 0)
-            { // Frecuencia de ~25Hz a 500Hz de loop
-                t_data.roll = roll_f;
-                t_data.pitch = pitch_f;
-                t_data.yaw = yaw_f;
-                t_data.motors[0] = m_out.m1;
-                t_data.motors[1] = m_out.m2;
-                t_data.motors[2] = m_out.m3;
-                t_data.motors[3] = m_out.m4;
-                t_data.throttle = total_throttle;
-
-                telemetry_send(&t_data);
-            }
+if (count++ % 20 == 0) {
+    mutex_enter_blocking(&my_mutex);
+    t_data.roll       = roll_f;
+    t_data.pitch      = pitch_f;
+    t_data.yaw        = yaw_f;
+    t_data.motors[0]  = m_out.m1;
+    t_data.motors[1]  = m_out.m2;
+    t_data.motors[2]  = m_out.m3;
+    t_data.motors[3]  = m_out.m4;
+    t_data.throttle   = total_throttle;
+    mutex_exit(&my_mutex);
+}
         }
+
     }
     // --- CORE 1: COMUNICACIONES Y TAREAS LENTAS ---
 }

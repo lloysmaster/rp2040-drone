@@ -8,22 +8,47 @@ static uint16_t constrain_motor(int16_t value, uint16_t throttle) {
     if (value > DSHOT_MAX) return DSHOT_MAX;
     return (uint16_t)value;
 }
-
+static uint16_t clamp16(float v) {
+    if (v < DSHOT_MIN) return DSHOT_MIN;
+    if (v > DSHOT_MAX) return DSHOT_MAX;
+    return (uint16_t)v;
+}
 motor_output_t mixer_compute(uint16_t throttle, float corr_roll, float corr_pitch, float corr_yaw) {
     motor_output_t out;
 
-    // Mezcla según configuración en X
-    // Motor 1: Front Right | Motor 2: Front Left | Motor 3: Rear Right | Motor 4: Rear Left
-    int16_t m1_raw = throttle - (int16_t)corr_roll - (int16_t)corr_pitch + (int16_t)corr_yaw;
-    int16_t m2_raw = throttle + (int16_t)corr_roll - (int16_t)corr_pitch - (int16_t)corr_yaw;
-    int16_t m3_raw = throttle - (int16_t)corr_roll + (int16_t)corr_pitch - (int16_t)corr_yaw;
-    int16_t m4_raw = throttle + (int16_t)corr_roll + (int16_t)corr_pitch + (int16_t)corr_yaw;
+    if (throttle < IDLE_THRESHOLD) {
+        out.m1 = out.m2 = out.m3 = out.m4 = 0;
+        return out;
+    }
 
-    // Aplicar límites y seguridad
-    out.m1 = constrain_motor(m1_raw, throttle);
-    out.m2 = constrain_motor(m2_raw, throttle);
-    out.m3 = constrain_motor(m3_raw, throttle);
-    out.m4 = constrain_motor(m4_raw, throttle);
+    float t = (float)throttle;
+    float m[4];
+    m[0] = t - corr_roll - corr_pitch + corr_yaw;  // FR
+    m[1] = t + corr_roll - corr_pitch - corr_yaw;  // FL
+    m[2] = t - corr_roll + corr_pitch - corr_yaw;  // RR
+    m[3] = t + corr_roll + corr_pitch + corr_yaw;  // RL
+
+    // Escalar si algún motor se sale del rango
+    float max_out = m[0];
+    float min_out = m[0];
+    for (int i = 1; i < 4; i++) {
+        if (m[i] > max_out) max_out = m[i];
+        if (m[i] < min_out) min_out = m[i];
+    }
+
+    if (max_out > DSHOT_MAX) {
+        float excess = max_out - DSHOT_MAX;
+        for (int i = 0; i < 4; i++) m[i] -= excess;
+    }
+    if (min_out < DSHOT_MIN) {
+        float deficit = DSHOT_MIN - min_out;
+        for (int i = 0; i < 4; i++) m[i] += deficit;
+    }
+
+    out.m1 = clamp16(m[0]);
+    out.m2 = clamp16(m[1]);
+    out.m3 = clamp16(m[2]);
+    out.m4 = clamp16(m[3]);
 
     return out;
 }
